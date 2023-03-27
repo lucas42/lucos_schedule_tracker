@@ -1,0 +1,14 @@
+version: '3'
+services:
+  schedule_tracker:
+    build: .
+    container_name: lucos_schedule_tracker
+    ports: 
+      - "8024:8024"
+    image: lucas42/lucos_schedule_tracker
+    volumes:
+      - "db:/var/lib/schedule_tracker/"
+    restart: always
+
+volumes:
+  db:
