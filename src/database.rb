@@ -37,11 +37,14 @@ class Database
 
 	def getChecks
 		checks = {}
+		metrics = {}
 		@db.execute("SELECT * FROM schedule") do |schedule|
 			threshold = schedule["frequency"] * 2
 			check = {
 				:techDetail => "Checks whether the most recently finished run of scheduled job '#{schedule["system"]}' was succesful and happened in the last #{threshold} seconds"
 			}
+			last_run = DateTime.parse(schedule["last_success"] || schedule["last_error"])
+			age = ((DateTime.now - last_run) * 24 * 60 * 60).to_i
 			if schedule["last_success"].nil?
 				check[:ok] = false
 				check[:debug] = "Last run of schedule job errored at #{schedule["last_error"]}"
@@ -49,8 +52,6 @@ class Database
 					check[:debug] += " with message \"#{schedule["message"]}\""
 				end
 			else
-				last_success = DateTime.parse(schedule["last_success"])
-				age = ((DateTime.now - last_success) * 24 * 60 * 60).to_i
 				if age < threshold
 					check[:ok] = true
 				else
@@ -60,7 +61,11 @@ class Database
 			end
 
 			checks[schedule["system"]] = check
+			metrics[schedule["system"]] = {
+				:value => age,
+				:techDetail => "The number of seconds since the scheduled job last completed",
+			}
 		end
-		return checks
+		return checks, metrics
 	end
 end

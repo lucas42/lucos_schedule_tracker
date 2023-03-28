@@ -94,13 +94,14 @@ loop {
 					end
 				when "_info"
 					status = 200
+					checks, metrics = db.getChecks
 					info = {
-						system: "lucos_schedule_tracker",
-						checks: db.getChecks,
-						metrics: {},
-						ci: {
-							circle: "gh/lucas42/lucos_schedule_tracker",
-						}
+						:system => "lucos_schedule_tracker",
+						:checks => checks,
+						:metrics => metrics,
+						:ci => {
+							:circle => "gh/lucas42/lucos_schedule_tracker",
+						},
 					}
 					client.puts("HTTP/1.1 200 OK")
 					client.puts("Content-Type: application/json; Charset=UTF-8")
