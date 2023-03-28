@@ -4,11 +4,13 @@ require 'net/http'
 require 'uri'
 require 'json'
 require 'time'
-
+require './database.rb'
 
 $stdout.sync = true
 $stderr.sync = true
 Thread.abort_on_exception = true
+
+db = Database.new("/var/lib/schedule_tracker/schedule.sqlite")
 
 port = ENV['PORT'] || 8024
 server = TCPServer.open(port)

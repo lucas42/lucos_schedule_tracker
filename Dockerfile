@@ -2,7 +2,10 @@ FROM ruby:3-alpine
 
 WORKDIR /usr/src/app
 
-COPY *.rb .
+COPY src/Gemfile .
+RUN bundle install
+
+COPY src/*.rb .
 
 ENV PORT 8024
 EXPOSE $PORT
