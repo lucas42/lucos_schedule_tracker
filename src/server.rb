@@ -28,6 +28,12 @@ loop {
 				if header.nil?
 					header = line.strip
 				end
+				if line.start_with?("Content-Length: ")
+					request_length = line.split(': ')[1].strip.to_i
+				end
+				if line.start_with?("Content-Type: ")
+					request_type = line.split(': ')[1].strip
+				end
 				if line == "\r\n"
 					break
 				end
@@ -42,6 +48,19 @@ loop {
 			uristr = header_parts[1]
 			uri = URI(uristr)
 			path = uri.path.gsub('..','').split('/')
+			body = nil
+			if http_method == "POST"
+				raw_body = client.read(request_length)
+				if request_type == "application/json"
+					begin
+						body = JSON.parse(raw_body)
+					rescue Exception => e
+						raise "Can't parse JSON: "+e.message
+					end
+				else
+					raise "This endpoint doesn't support "+(request_type||"unknown file type")
+				end
+			end
 			case path[1]
 				when 'report-status'
 					if http_method == "POST"
@@ -88,11 +107,25 @@ loop {
 				if e.message.end_with?("Not Found")
 					status = 404
 					client.puts("HTTP/1.1 404 "+e.message)
+					client.puts("Content-Type: text/plain")
+					client.puts
+					client.puts(e.message)
+				elsif e.message.start_with?("Can't parse JSON")
+					status = 400
+					client.puts("HTTP/1.1 404 Bad Request")
+					client.puts("Content-Type: text/plain")
+					client.puts
+					client.puts(e.message)
+				elsif e.message.start_with?("This endpoint doesn't support")
+					status = 415
+					client.puts("HTTP/1.1 415 Unsupported Media Type")
+					client.puts("Content-Type: text/plain")
 					client.puts
 					client.puts(e.message)
 				else
 					status = 500
 					client.puts("HTTP/1.1 500 Internal Error")
+					client.puts("Content-Type: text/plain")
 					client.puts
 					client.puts(e.message)
 					client.puts(e.backtrace)
