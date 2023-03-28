@@ -26,4 +26,11 @@ class Database
 		return false
 	end
 
+	def updateScheduleSuccess(system, frequency)
+		@db.execute("INSERT OR REPLACE INTO schedule(system, frequency, last_success, message) VALUES(?, ?, datetime('now'), NULL)", [system, frequency])
+	end
+
+	def updateScheduleError(system, frequency, error_message)
+		@db.execute("INSERT OR REPLACE INTO schedule(system, frequency, last_error, message) VALUES(?, ?, datetime('now'), ?)", [system, frequency, error_message])
+	end
 end

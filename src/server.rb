@@ -64,7 +64,23 @@ loop {
 			case path[1]
 				when 'report-status'
 					if http_method == "POST"
-						# TODO: Write logic goes here
+						['system', 'frequency', 'status'].each { |field|
+							if body[field].nil?
+								raise "Bad Request: Missing `#{field}` field"
+							end
+						}
+						frequency = body['frequency'].to_i
+						if frequency == 0
+							raise "Bad Request: `frequency` must be a positive integer"
+						end
+						case body['status']
+						when "success"
+							db.updateScheduleSuccess(body['system'], frequency)
+						when "error"
+							db.updateScheduleError(body['system'], frequency, body['message'])
+						else
+							raise "Bad Request: Unrecognised value for `status` '#{body['status']}'"
+						end
 						status = 202
 						client.puts("HTTP/1.1 202 Accepted")
 						client.puts("")
@@ -110,9 +126,9 @@ loop {
 					client.puts("Content-Type: text/plain")
 					client.puts
 					client.puts(e.message)
-				elsif e.message.start_with?("Can't parse JSON")
+				elsif e.message.start_with?("Bad Request") || e.message.start_with?("Can't parse JSON")
 					status = 400
-					client.puts("HTTP/1.1 404 Bad Request")
+					client.puts("HTTP/1.1 400 Bad Request")
 					client.puts("Content-Type: text/plain")
 					client.puts
 					client.puts(e.message)
