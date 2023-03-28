@@ -96,9 +96,7 @@ loop {
 					status = 200
 					info = {
 						system: "lucos_schedule_tracker",
-						checks: {
-							# TOOD: Read logic goes here
-						},
+						checks: db.getChecks,
 						metrics: {},
 						ci: {
 							circle: "gh/lucas42/lucos_schedule_tracker",

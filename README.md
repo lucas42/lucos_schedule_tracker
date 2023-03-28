@@ -18,8 +18,8 @@ The build is configured to run in Dockerhub when a commit is pushed to the maste
 
 `/report-status` Accepts a POST request with json encoded object containing the following fields:
 
-* **`system`** The lucos system running the scheduled job.  (Must be unique - for systems with multiple jobs, append something to distuish them)
-* **`frequency`** A postive integer specifying how often the job should run, in seconds
+* **`system`** The lucos system running the scheduled job.  (Must be unique - for systems with multiple jobs, append something to distinguish them)
+* **`frequency`** A postive integer specifying how often the job should run, in seconds.  (The threshold for alerting is double the expected frequency)
 * **`status`** The outcome of the scheduled job.  Accepts either "success" or "error".
 * **`message`** [optional] An error message indicating why the job failed.  (ignored if status is "success")
 
