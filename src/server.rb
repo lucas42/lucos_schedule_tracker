@@ -102,6 +102,8 @@ loop {
 						:ci => {
 							:circle => "gh/lucas42/lucos_schedule_tracker",
 						},
+						:network_only => true,
+						:show_on_homepage => false,
 					}
 					client.puts("HTTP/1.1 200 OK")
 					client.puts("Content-Type: application/json; Charset=UTF-8")
