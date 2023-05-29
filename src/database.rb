@@ -49,7 +49,7 @@ class Database
 		checks = {}
 		metrics = {}
 		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
-			time_threshold = schedule["frequency"] * 2
+			time_threshold = schedule["frequency"] * 3
 			error_threshold = 2
 			check = {
 				:techDetail => "Checks whether any of the #{error_threshold} most recently finished runs of scheduled job '#{schedule["system"]}' were successful, and that the most recent happened in the last #{time_threshold} seconds"
