@@ -7,7 +7,4 @@ RUN bundle install
 
 COPY src/*.rb .
 
-ENV PORT 8024
-EXPOSE $PORT
-
 CMD ["ruby", "server.rb"]

@@ -12,7 +12,7 @@ Thread.abort_on_exception = true
 
 db = Database.new("/var/lib/schedule_tracker/schedule.sqlite")
 
-port = ENV['PORT'] || 8024
+port = ENV['PORT'] || raise("Enviornment Variable PORT not set")
 server = TCPServer.open(port)
 puts 'server running on port '+port
 loop {
