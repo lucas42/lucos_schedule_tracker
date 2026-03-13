@@ -10,6 +10,12 @@ services:
     volumes:
       - "db:/var/lib/schedule_tracker/"
     restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${PORT}/_info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   db:
