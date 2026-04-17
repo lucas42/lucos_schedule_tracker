@@ -6,7 +6,7 @@ services:
       - $PORT:$PORT
     environment:
       - PORT
-    image: lucas42/lucos_schedule_tracker
+    image: lucas42/lucos_schedule_tracker:${VERSION:-latest}
     volumes:
       - "db:/var/lib/schedule_tracker/"
     restart: always
