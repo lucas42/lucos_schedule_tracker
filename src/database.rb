@@ -45,6 +45,10 @@ class Database
 		@db.execute("INSERT OR REPLACE INTO #{SCHEDULE_TABLE}(system, frequency, last_error, error_count, message) VALUES(?, ?, datetime('now'), ?, ?)", [system, frequency, error_count, error_message])
 	end
 
+	def deleteSchedule(system)
+		@db.execute("DELETE FROM #{SCHEDULE_TABLE} WHERE system = ?", [system])
+	end
+
 	def getChecks
 		checks = {}
 		metrics = {}

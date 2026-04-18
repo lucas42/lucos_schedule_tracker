@@ -92,7 +92,25 @@ loop {
 						client.puts("")
 						client.puts("Endpoint only accepts POST requests")
 					end
-				when "_info"
+				when 'schedule'
+				system_name = path[2] && URI.decode_www_form_component(path[2])
+				if system_name.nil? || system_name.empty?
+					raise "File Not Found"
+				end
+				if http_method == "DELETE"
+					db.deleteSchedule(system_name)
+					status = 204
+					client.puts("HTTP/1.1 204 No Content")
+					client.puts("")
+				else
+					status = 405
+					client.puts("HTTP/1.1 405 Method Not Allowed")
+					client.puts("Allow: DELETE")
+					client.puts("Content-Type: text/plain")
+					client.puts("")
+					client.puts("Endpoint only accepts DELETE requests")
+				end
+			when "_info"
 					status = 200
 					checks, metrics = db.getChecks
 					info = {
