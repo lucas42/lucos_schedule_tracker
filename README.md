@@ -27,3 +27,12 @@ cURL examples:
 
 * `curl "http://localhost:8024/report-status" -H "Content-Type: application/json" -i --data '{"system":"lucos_test","frequency": 45,"status":"success","message":"Good Thing Happened"}'`
 * `curl "http://localhost:8024/report-status" -H "Content-Type: application/json" -i --data '{"system":"lucos_test","frequency": 45,"status":"error","message":"Failure Happened"}'`
+
+`/schedule/{system}` Accepts a DELETE request to remove a schedule entry from the tracker.
+
+* Returns `204 No Content` whether or not the entry existed (idempotent).
+* If the system later calls `/report-status` again, the entry will be re-created automatically.
+
+cURL example:
+
+* `curl -X DELETE "http://localhost:8024/schedule/lucos_test" -i`
