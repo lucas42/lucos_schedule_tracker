@@ -1,4 +1,5 @@
 require "sqlite3"
+require "date"
 
 class Database
 	SCHEDULE_TABLE = "schedule_v2"
@@ -49,11 +50,34 @@ class Database
 		@db.execute("DELETE FROM #{SCHEDULE_TABLE} WHERE system = ?", [system])
 	end
 
+	# Returns the alert threshold in seconds for a job with the given frequency.
+	#
+	# Rule:
+	#   frequency < 4 days  →  frequency × 3         (unchanged)
+	#   frequency ≥ 4 days  →  (frequency × 2) + 30 minutes
+	#
+	# The +30-minute term is jitter insurance: a slackless ×2 rule has zero
+	# tolerance for run-length variance.  30 minutes is generous against typical
+	# lucos run-lengths and trivial against the ≥8-day thresholds in the
+	# long-frequency band.
+	#
+	# Note the step-change at the 4-day boundary: a job with frequency=3d23h
+	# gets a ~12-day threshold; bump it to 4d and it gets ~8.5 days.  This is
+	# intentional – callers choosing a value near the boundary should be aware.
+	def calculate_time_threshold(frequency)
+		four_days = 4 * 24 * 60 * 60
+		if frequency < four_days
+			frequency * 3
+		else
+			(frequency * 2) + (30 * 60)
+		end
+	end
+
 	def getChecks
 		checks = {}
 		metrics = {}
 		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
-			time_threshold = schedule["frequency"] * 3
+			time_threshold = calculate_time_threshold(schedule["frequency"])
 			error_threshold = 2
 			check = {
 				:techDetail => "Checks whether any of the #{error_threshold} most recently finished runs of scheduled job '#{schedule["system"]}' were successful, and that the most recent happened in the last #{time_threshold} seconds"

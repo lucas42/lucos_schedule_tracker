@@ -19,7 +19,11 @@ The build is configured to run in Dockerhub when a commit is pushed to the `main
 `/report-status` Accepts a POST request with json encoded object containing the following fields:
 
 * **`system`** The lucos system running the scheduled job.  (Must be unique - for systems with multiple jobs, append something to distinguish them)
-* **`frequency`** A postive integer specifying how often the job should run, in seconds.  (The threshold for alerting is double the expected frequency)
+* **`frequency`** A positive integer specifying how often the job should run, in seconds.  The alert threshold is derived server-side from `frequency` using a frequency-keyed rule:
+  * `frequency < 4 days`: threshold = `frequency × 3`
+  * `frequency ≥ 4 days`: threshold = `(frequency × 2) + 30 minutes`
+
+  **Note on the step-change at the 4-day boundary:** a job at `frequency = 3 days 23h` gets a ~12-day threshold; bump it to `4 days` and it gets ~8.5 days. This is intentional — choose your frequency with this in mind if you are near the boundary.
 * **`status`** The outcome of the scheduled job.  Accepts either "success" or "error".
 * **`message`** [optional] An error message indicating why the job failed.  (ignored if status is "success")
 
