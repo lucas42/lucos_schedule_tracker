@@ -17,5 +17,13 @@ services:
       retries: 3
       start_period: 15s
 
+  test:
+    build: .
+    container_name: lucos_schedule_tracker_test
+    image: lucas42/lucos_schedule_tracker:${VERSION:-latest}
+    command: ruby database_test.rb
+    profiles:
+      - test
+
 volumes:
   db:
