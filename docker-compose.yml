@@ -21,7 +21,7 @@ services:
     build: .
     container_name: lucos_schedule_tracker_test
     image: lucas42/lucos_schedule_tracker:${VERSION:-latest}
-    command: ruby database_test.rb
+    command: sh -c "ruby database_test.rb && ruby server_test.rb"
     profiles:
       - test
 
