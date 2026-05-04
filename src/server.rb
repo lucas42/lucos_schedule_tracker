@@ -22,6 +22,7 @@ loop {
 		header = nil
 		uristr = "/"
 		remote_ip = "unknown_client"
+		user_agent = "-"
 		begin
 			_, _, _, remote_ip = client.peeraddr
 			while line = client.gets
@@ -33,6 +34,9 @@ loop {
 				end
 				if line.start_with?("Content-Type: ")
 					request_type = line.split(': ')[1].strip
+				end
+				if line.start_with?("User-Agent: ")
+					user_agent = line.split(': ', 2)[1].strip
 				end
 				if line == "\r\n"
 					break
@@ -63,6 +67,7 @@ loop {
 			end
 			case path[1]
 				when 'report-status'
+					raise "File Not Found" if path.length > 2
 					if http_method == "POST"
 						['system', 'frequency', 'status'].each { |field|
 							if body[field].nil?
@@ -111,6 +116,7 @@ loop {
 						client.puts("Endpoint only accepts DELETE requests")
 					end
 				when "_info"
+					raise "File Not Found" if path.length > 2
 					status = 200
 					checks, metrics = db.getChecks
 					info = {
@@ -175,7 +181,7 @@ loop {
 				puts rescueException.backtrace
 			end
 		end
-		puts remote_ip+" - - \""+header+"\" ["+request_time+"] "+status.to_s+" -"
+		puts remote_ip+" - - \""+header+"\" ["+request_time+"] "+status.to_s+" - \""+user_agent+"\""
 		client.close
 	end
 }
