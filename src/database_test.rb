@@ -49,34 +49,49 @@ class CalculateTimeThresholdTest < Minitest::Test
 end
 
 class CalculateErrorThresholdTest < Minitest::Test
-	ONE_DAY    = 24 * 60 * 60
-	FOUR_DAYS  = 4 * ONE_DAY
-	SEVEN_DAYS = 7 * ONE_DAY
+	ONE_DAY     = 24 * 60 * 60
+	TEN_MINS    = 10 * 60
+	THIRTY_MINS = 30 * 60
+	NINETY_MINS = 90 * 60
 
 	def setup
 		@db = make_db
 	end
 
-	# Sub-4-day jobs: floor(frequency × 3 / frequency) = 3
-	def test_high_frequency_job_gets_threshold_of_three
-		assert_equal 3, @db.calculate_error_threshold(60)  # 60s job
+	# frequency < 10 min → 5
+	def test_sixty_seconds_gets_threshold_of_five
+		assert_equal 5, @db.calculate_error_threshold(60)
 	end
 
-	def test_one_day_job_gets_threshold_of_three
-		assert_equal 3, @db.calculate_error_threshold(ONE_DAY)
+	def test_just_under_ten_minutes_gets_threshold_of_five
+		assert_equal 5, @db.calculate_error_threshold(TEN_MINS - 1)
 	end
 
-	def test_just_under_four_days_gets_threshold_of_three
-		assert_equal 3, @db.calculate_error_threshold(FOUR_DAYS - 1)
+	# frequency ≥ 10 min, < 30 min → 4
+	def test_exactly_ten_minutes_gets_threshold_of_four
+		assert_equal 4, @db.calculate_error_threshold(TEN_MINS)
 	end
 
-	# 4+ day jobs: floor((frequency × 2 + 1800) / frequency) = 2
-	def test_exactly_four_days_gets_threshold_of_two
-		assert_equal 2, @db.calculate_error_threshold(FOUR_DAYS)
+	def test_fifteen_minutes_gets_threshold_of_four
+		assert_equal 4, @db.calculate_error_threshold(15 * 60)
 	end
 
-	def test_seven_day_job_gets_threshold_of_two
-		assert_equal 2, @db.calculate_error_threshold(SEVEN_DAYS)
+	# frequency ≥ 30 min, < 90 min → 3
+	def test_exactly_thirty_minutes_gets_threshold_of_three
+		assert_equal 3, @db.calculate_error_threshold(THIRTY_MINS)
+	end
+
+	def test_one_hour_gets_threshold_of_three
+		assert_equal 3, @db.calculate_error_threshold(60 * 60)
+	end
+
+	# frequency ≥ 90 min → 2
+	def test_exactly_ninety_minutes_gets_threshold_of_two
+		assert_equal 2, @db.calculate_error_threshold(NINETY_MINS)
+	end
+
+	def test_one_day_job_gets_threshold_of_two
+		assert_equal 2, @db.calculate_error_threshold(ONE_DAY)
 	end
 end
 
@@ -118,25 +133,24 @@ class GetChecksTest < Minitest::Test
 		assert metrics.key?("test_job_errors")
 	end
 
-	# Sub-4-day jobs now have error_threshold 3 (not 2).
-	# Two consecutive errors should still be OK.
+	# High-frequency jobs (< 10 min, threshold 5) tolerate 4 errors before alerting.
 	def test_two_consecutive_errors_not_enough_to_alert_for_high_frequency_job
-		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong")
-		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong again")
+		one_minute = 60
+		@db.updateScheduleError("test_job", one_minute, "something went wrong")
+		@db.updateScheduleError("test_job", one_minute, "something went wrong again")
 		checks, _ = @db.getChecks
-		assert checks["test_job"][:ok], "Expected 2 consecutive errors to still be OK for a 1-day job (threshold is now 3)"
+		assert checks["test_job"][:ok], "Expected 2 consecutive errors to still be OK for a 60s job (threshold is 5)"
 	end
 
-	# Three consecutive errors on a sub-4-day job should alert.
+	# Two consecutive errors on a daily job (threshold 2) should alert.
 	def test_consecutive_errors_alerts
 		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong")
 		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong again")
-		@db.updateScheduleError("test_job", ONE_DAY, "third failure")
 		checks, _ = @db.getChecks
-		refute checks["test_job"][:ok], "Expected 3 consecutive errors to be not OK for a 1-day job"
+		refute checks["test_job"][:ok], "Expected 2 consecutive errors to be not OK for a 1-day job (threshold is 2)"
 	end
 
-	# 4+ day jobs retain error_threshold 2. Two errors should still alert.
+	# Weekly jobs (threshold 2). Two errors should still alert.
 	def test_two_consecutive_errors_alert_for_long_cadence_job
 		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong")
 		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong again")

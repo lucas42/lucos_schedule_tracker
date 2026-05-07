@@ -75,16 +75,25 @@ class Database
 
 	# Returns the consecutive-failure threshold for a job with the given frequency.
 	#
-	# Formula: floor(time_threshold / frequency), which mirrors the two-band
-	# structure of calculate_time_threshold:
-	#   frequency < 4 days  →  floor(frequency × 3 / frequency) = 3
-	#   frequency ≥ 4 days  →  floor((frequency × 2 + 1800) / frequency) = 2
-	#
-	# High-frequency jobs (e.g. 60s cadence) therefore tolerate 3 consecutive
-	# failures before alerting rather than 2, reducing noise from brief upstream
-	# blips.  Long-cadence jobs (weekly, monthly) stay at 2 — already generous.
+	# Higher-frequency jobs get more tolerance to reduce noise from brief
+	# upstream blips:
+	#   frequency < 10 min  →  5
+	#   frequency < 30 min  →  4
+	#   frequency < 90 min  →  3
+	#   frequency ≥ 90 min  →  2
 	def calculate_error_threshold(frequency)
-		(calculate_time_threshold(frequency).to_f / frequency).floor
+		ten_mins    = 10 * 60
+		thirty_mins = 30 * 60
+		ninety_mins = 90 * 60
+		if frequency < ten_mins
+			5
+		elsif frequency < thirty_mins
+			4
+		elsif frequency < ninety_mins
+			3
+		else
+			2
+		end
 	end
 
 	def getChecks
