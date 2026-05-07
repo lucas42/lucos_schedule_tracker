@@ -73,12 +73,26 @@ class Database
 		end
 	end
 
+	# Returns the consecutive-failure threshold for a job with the given frequency.
+	#
+	# Formula: floor(time_threshold / frequency), which mirrors the two-band
+	# structure of calculate_time_threshold:
+	#   frequency < 4 days  →  floor(frequency × 3 / frequency) = 3
+	#   frequency ≥ 4 days  →  floor((frequency × 2 + 1800) / frequency) = 2
+	#
+	# High-frequency jobs (e.g. 60s cadence) therefore tolerate 3 consecutive
+	# failures before alerting rather than 2, reducing noise from brief upstream
+	# blips.  Long-cadence jobs (weekly, monthly) stay at 2 — already generous.
+	def calculate_error_threshold(frequency)
+		(calculate_time_threshold(frequency).to_f / frequency).floor
+	end
+
 	def getChecks
 		checks = {}
 		metrics = {}
 		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
 			time_threshold = calculate_time_threshold(schedule["frequency"])
-			error_threshold = 2
+			error_threshold = calculate_error_threshold(schedule["frequency"])
 			check = {
 				:techDetail => "Checks whether any of the #{error_threshold} most recently finished runs of scheduled job '#{schedule["system"]}' were successful, and that the most recent happened in the last #{time_threshold} seconds"
 			}
