@@ -73,12 +73,35 @@ class Database
 		end
 	end
 
+	# Returns the consecutive-failure threshold for a job with the given frequency.
+	#
+	# Higher-frequency jobs get more tolerance to reduce noise from brief
+	# upstream blips:
+	#   frequency < 10 min  →  5
+	#   frequency < 30 min  →  4
+	#   frequency < 90 min  →  3
+	#   frequency ≥ 90 min  →  2
+	def calculate_error_threshold(frequency)
+		ten_mins    = 10 * 60
+		thirty_mins = 30 * 60
+		ninety_mins = 90 * 60
+		if frequency < ten_mins
+			5
+		elsif frequency < thirty_mins
+			4
+		elsif frequency < ninety_mins
+			3
+		else
+			2
+		end
+	end
+
 	def getChecks
 		checks = {}
 		metrics = {}
 		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
 			time_threshold = calculate_time_threshold(schedule["frequency"])
-			error_threshold = 2
+			error_threshold = calculate_error_threshold(schedule["frequency"])
 			check = {
 				:techDetail => "Checks whether any of the #{error_threshold} most recently finished runs of scheduled job '#{schedule["system"]}' were successful, and that the most recent happened in the last #{time_threshold} seconds"
 			}
