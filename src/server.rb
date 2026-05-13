@@ -151,6 +151,7 @@ loop {
 							client.puts("Endpoint only accepts POST requests")
 						end
 					when 'schedule'
+						raise "File Not Found" if path.length > 5
 						system_name = path[3] && URI.decode_www_form_component(path[3])
 						job_name = path[4] && URI.decode_www_form_component(path[4])
 						if system_name.nil? || system_name.empty? || job_name.nil? || job_name.empty?

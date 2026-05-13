@@ -100,25 +100,20 @@ class ServerRoutingTest < Minitest::Test
 		response = get_request("/_info")
 		assert_equal "200", response.code
 	end
+end
 
+class V2ServerRoutingTest < ServerRoutingTest
 	# ── v2 POST /v2/report-status ────────────────────────────────────────────
 
 	def test_v2_report_status_happy_path_returns_202
-		response = post_json("/v2/report-status", {
-			"system" => "lucos_arachne",
-			"job_name" => "ingestor_dbpedia",
-			"frequency" => 86400,
-			"status" => "success",
-		})
+		body = { "system" => "lucos_arachne", "job_name" => "ingestor_dbpedia", "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
 		assert_equal "202", response.code
 	end
 
 	def test_v2_report_status_omitted_job_name_returns_202
-		response = post_json("/v2/report-status", {
-			"system" => "lucos_arachne",
-			"frequency" => 86400,
-			"status" => "success",
-		})
+		body = { "system" => "lucos_arachne", "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
 		assert_equal "202", response.code
 	end
 
@@ -152,7 +147,8 @@ class ServerRoutingTest < Minitest::Test
 	# ── v2 DELETE /v2/schedule/{system}/{job_name} ────────────────────────────
 
 	def test_v2_delete_existing_row_returns_204
-		post_json("/v2/report-status", { "system" => "lucos_arachne", "job_name" => "my_job", "frequency" => 3600, "status" => "success" })
+		body = { "system" => "lucos_arachne", "job_name" => "my_job", "frequency" => 3_600, "status" => "success" }
+		post_json("/v2/report-status", body)
 		response = delete_request("/v2/schedule/lucos_arachne/my_job")
 		assert_equal "204", response.code
 	end
@@ -167,11 +163,16 @@ class ServerRoutingTest < Minitest::Test
 		assert_equal "404", response.code
 	end
 
+	def test_v2_delete_extra_path_segment_returns_404
+		response = delete_request("/v2/schedule/lucos_arachne/my_job/extra")
+		assert_equal "404", response.code
+	end
+
 	# ── v1 DELETE addresses (system, '') row ─────────────────────────────────
 
 	def test_v1_delete_addresses_empty_job_name_row
 		# Write via v1; confirm the row appears in /_info; delete via v1; confirm gone.
-		post_json("/report-status", { "system" => "cleanup_sys", "frequency" => 3600, "status" => "success" })
+		post_json("/report-status", { "system" => "cleanup_sys", "frequency" => 3_600, "status" => "success" })
 		info_before = JSON.parse(get_request("/_info").body)
 		assert info_before["checks"].key?("cleanup_sys"), "Row should appear in /_info before delete"
 
@@ -186,8 +187,8 @@ class ServerRoutingTest < Minitest::Test
 
 	def test_same_row_addressed_by_v1_and_v2_with_empty_job_name
 		# Both v1 POST and v2 POST (omitted job_name) should address the same row.
-		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3600, "status" => "success" })
-		post_json("/v2/report-status", { "system" => "shared_sys", "frequency" => 3600, "status" => "success" })
+		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
+		post_json("/v2/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
 
 		info = JSON.parse(get_request("/_info").body)
 		assert_equal 1, info["checks"].select { |k, _| k.start_with?("shared_sys") }.length,

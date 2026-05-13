@@ -103,8 +103,20 @@ class MigrationTest < Minitest::Test
 
 		# Manually seed schedule_v2 with a row
 		raw_db = SQLite3::Database.new(db_file.path)
-		raw_db.execute("CREATE TABLE schedule_v2 (system TEXT PRIMARY KEY, frequency INTEGER, last_success TEXT, last_error TEXT, error_count INTEGER, message TEXT)")
-		raw_db.execute("INSERT INTO schedule_v2(system, frequency, last_success, error_count) VALUES('old_system', 3600, datetime('now'), 0)")
+		raw_db.execute(<<~SQL)
+			CREATE TABLE schedule_v2 (
+				system TEXT PRIMARY KEY,
+				frequency INTEGER,
+				last_success TEXT,
+				last_error TEXT,
+				error_count INTEGER,
+				message TEXT
+			)
+		SQL
+		raw_db.execute(<<~SQL)
+			INSERT INTO schedule_v2(system, frequency, last_success, error_count)
+			VALUES('old_system', 3600, datetime('now'), 0)
+		SQL
 		raw_db.close
 
 		db = Database.new(db_file.path)
@@ -121,7 +133,7 @@ class MigrationTest < Minitest::Test
 		db_file.close
 
 		Database.new(db_file.path)
-		db = Database.new(db_file.path)  # second init must not error
+		db = Database.new(db_file.path) # second init must not error
 
 		checks, = db.getChecks
 		assert_equal({}, checks, "Expected empty checks on fresh db after re-init")
