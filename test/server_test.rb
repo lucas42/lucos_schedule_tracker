@@ -1,36 +1,67 @@
 require "minitest/autorun"
 require "net/http"
 require "json"
-require "fileutils"
 require "socket"
-
-# Ensure the DB directory exists so the server can open its SQLite file.
-FileUtils.mkdir_p("/var/lib/schedule_tracker")
-
-TEST_PORT = "18765"
-
-# Spawn the server once for the whole test run.
-SERVER_PID = spawn({"PORT" => TEST_PORT}, "ruby", "server.rb", out: "/dev/null", err: "/dev/null")
-
-# Wait up to 2 s for the server to accept connections.
-20.times do
-	begin
-		TCPSocket.new("127.0.0.1", TEST_PORT.to_i).close
-		break
-	rescue Errno::ECONNREFUSED
-		sleep 0.1
-	end
-end
-
-Minitest.after_run { Process.kill("TERM", SERVER_PID) rescue nil }
+require "tempfile"
 
 class ServerRoutingTest < Minitest::Test
+	SERVER_RB = File.expand_path("../server.rb", __dir__)
+
+	def setup
+		# Unique SQLite file per test — no shared state between tests.
+		@db_file = Tempfile.new(["schedule_tracker_test", ".sqlite"])
+		@db_file.close
+
+		# Capture server logs so failures are diagnosable.
+		@server_log = Tempfile.new(["schedule_tracker_server", ".log"])
+		@server_log.close
+
+		# Grab a free port from the OS.
+		port_socket = TCPServer.new("127.0.0.1", 0)
+		@test_port = port_socket.addr[1].to_s
+		port_socket.close
+
+		# Spawn a fresh server for this test.
+		@server_pid = spawn(
+			{"PORT" => @test_port, "DB_PATH" => @db_file.path},
+			"ruby", SERVER_RB,
+			out: @server_log.path,
+			err: [@server_log.path, "a"]
+		)
+
+		# Wait up to 2 s for the server to accept connections.
+		20.times do
+			begin
+				TCPSocket.new("127.0.0.1", @test_port.to_i).close
+				break
+			rescue Errno::ECONNREFUSED
+				sleep 0.1
+			end
+		end
+	end
+
+	def teardown
+		Process.kill("TERM", @server_pid) rescue nil
+		Process.wait(@server_pid) rescue nil
+		unless failures.empty?
+			puts "\n--- Server log for #{name} ---"
+			begin
+				puts File.read(@server_log.path)
+			rescue => e
+				puts "(log unavailable: #{e.message})"
+			end
+			puts "--- End server log ---"
+		end
+		@server_log.unlink rescue nil
+		@db_file.unlink rescue nil
+	end
+
 	def get_request(path)
-		Net::HTTP.start("127.0.0.1", TEST_PORT.to_i) { |h| h.get(path) }
+		Net::HTTP.start("127.0.0.1", @test_port.to_i) { |h| h.get(path) }
 	end
 
 	def post_json(path, body)
-		Net::HTTP.start("127.0.0.1", TEST_PORT.to_i) do |h|
+		Net::HTTP.start("127.0.0.1", @test_port.to_i) do |h|
 			req = Net::HTTP::Post.new(path, "Content-Type" => "application/json")
 			req.body = JSON.dump(body)
 			h.request(req)
