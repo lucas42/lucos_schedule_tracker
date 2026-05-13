@@ -96,6 +96,109 @@ class CalculateErrorThresholdTest < Minitest::Test
 	end
 end
 
+class MigrationTest < Minitest::Test
+	def test_migrates_rows_from_schedule_v2
+		db_file = Tempfile.new(["migration_test", ".sqlite"])
+		db_file.close
+
+		# Manually seed schedule_v2 with a row
+		raw_db = SQLite3::Database.new(db_file.path)
+		raw_db.execute("CREATE TABLE schedule_v2 (system TEXT PRIMARY KEY, frequency INTEGER, last_success TEXT, last_error TEXT, error_count INTEGER, message TEXT)")
+		raw_db.execute("INSERT INTO schedule_v2(system, frequency, last_success, error_count) VALUES('old_system', 3600, datetime('now'), 0)")
+		raw_db.close
+
+		db = Database.new(db_file.path)
+
+		checks, = db.getChecks
+		assert checks.key?("old_system"), "Migrated row should appear as 'old_system'"
+		refute db.tableExists("schedule_v2"), "schedule_v2 should be dropped after migration"
+	ensure
+		db_file.unlink rescue nil
+	end
+
+	def test_idempotent_when_schedule_v3_already_exists
+		db_file = Tempfile.new(["idempotent_test", ".sqlite"])
+		db_file.close
+
+		Database.new(db_file.path)
+		db = Database.new(db_file.path)  # second init must not error
+
+		checks, = db.getChecks
+		assert_equal({}, checks, "Expected empty checks on fresh db after re-init")
+	ensure
+		db_file.unlink rescue nil
+	end
+end
+
+class V2DatabaseTest < Minitest::Test
+	ONE_DAY = 24 * 60 * 60
+
+	def setup
+		@db = make_db
+	end
+
+	def test_success_with_job_name_keyed_by_system_slash_job
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "ingestor_dbpedia")
+		checks, = @db.getChecks
+		assert checks.key?("lucos_arachne/ingestor_dbpedia"), "Named job should have composite key"
+	end
+
+	def test_success_without_job_name_keyed_by_system_only
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY)
+		checks, = @db.getChecks
+		assert checks.key?("lucos_arachne"), "Row with empty job_name should use system as key"
+	end
+
+	def test_v1_and_v2_empty_job_name_address_same_row
+		@db.updateScheduleSuccess("shared_sys", ONE_DAY)      # v1 call
+		@db.updateScheduleSuccess("shared_sys", ONE_DAY, "")  # v2 call, job_name=''
+		checks, = @db.getChecks
+		assert_equal 1, checks.length, "v1 and v2 with job_name='' should address the same row"
+	end
+
+	def test_age_metric_uses_composite_key_for_named_job
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "my_job")
+		_, metrics = @db.getChecks
+		assert metrics.key?("lucos_arachne/my_job_age")
+		assert metrics.key?("lucos_arachne/my_job_errors")
+	end
+
+	def test_delete_schedule_removes_empty_job_name_row
+		@db.updateScheduleSuccess("test_system", ONE_DAY)
+		@db.deleteSchedule("test_system")
+		checks, = @db.getChecks
+		refute checks.key?("test_system"), "v1 deleteSchedule should remove the (system, '') row"
+	end
+
+	def test_delete_schedule_does_not_affect_named_jobs
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "my_job")
+		@db.deleteSchedule("lucos_arachne")
+		checks, = @db.getChecks
+		refute checks.key?("lucos_arachne"), "v1 delete should remove the empty-job_name row"
+		assert checks.key?("lucos_arachne/my_job"), "Named job should be unaffected by v1 delete"
+	end
+
+	def test_delete_schedule_v2_removes_named_row
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "my_job")
+		@db.deleteScheduleV2("lucos_arachne", "my_job")
+		checks, = @db.getChecks
+		refute checks.key?("lucos_arachne/my_job"), "v2 delete should remove the named row"
+	end
+
+	def test_delete_schedule_v2_is_idempotent
+		# Deleting a non-existent row must not raise
+		@db.deleteScheduleV2("nonexistent", "job")
+	end
+
+	def test_error_with_job_name_accumulates_error_count
+		@db.updateScheduleError("lucos_arachne", ONE_DAY, "oops", "my_job")
+		@db.updateScheduleError("lucos_arachne", ONE_DAY, "oops again", "my_job")
+		checks, = @db.getChecks
+		refute checks["lucos_arachne/my_job"][:ok], "Two consecutive errors on a daily job should alert"
+	end
+end
+
 class GetChecksTest < Minitest::Test
 	ONE_DAY    = 24 * 60 * 60
 	SEVEN_DAYS = 7 * ONE_DAY

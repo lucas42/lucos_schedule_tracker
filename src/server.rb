@@ -116,6 +116,62 @@ loop {
 						client.puts("")
 						client.puts("Endpoint only accepts DELETE requests")
 					end
+				when 'v2'
+					case path[2]
+					when 'report-status'
+						raise "File Not Found" if path.length > 3
+						if http_method == "POST"
+							['system', 'frequency', 'status'].each { |field|
+								if body[field].nil?
+									raise "Bad Request: Missing `#{field}` field"
+								end
+							}
+							frequency = body['frequency'].to_i
+							if frequency == 0
+								raise "Bad Request: `frequency` must be a positive integer"
+							end
+							job_name = body['job_name'] || ""
+							case body['status']
+							when "success"
+								db.updateScheduleSuccess(body['system'], frequency, job_name)
+							when "error"
+								db.updateScheduleError(body['system'], frequency, body['message'], job_name)
+							else
+								raise "Bad Request: Unrecognised value for `status` '#{body['status']}'"
+							end
+							status = 202
+							client.puts("HTTP/1.1 202 Accepted")
+							client.puts("")
+						else
+							status = 405
+							client.puts("HTTP/1.1 405 Method Not Allowed")
+							client.puts("Allow: POST")
+							client.puts("Content-Type: text/plain")
+							client.puts("")
+							client.puts("Endpoint only accepts POST requests")
+						end
+					when 'schedule'
+						system_name = path[3] && URI.decode_www_form_component(path[3])
+						job_name = path[4] && URI.decode_www_form_component(path[4])
+						if system_name.nil? || system_name.empty? || job_name.nil? || job_name.empty?
+							raise "File Not Found"
+						end
+						if http_method == "DELETE"
+							db.deleteScheduleV2(system_name, job_name)
+							status = 204
+							client.puts("HTTP/1.1 204 No Content")
+							client.puts("")
+						else
+							status = 405
+							client.puts("HTTP/1.1 405 Method Not Allowed")
+							client.puts("Allow: DELETE")
+							client.puts("Content-Type: text/plain")
+							client.puts("")
+							client.puts("Endpoint only accepts DELETE requests")
+						end
+					else
+						raise "File Not Found"
+					end
 				when "_info"
 					raise "File Not Found" if path.length > 2
 					status = 200
