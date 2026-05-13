@@ -67,6 +67,10 @@ class ServerRoutingTest < Minitest::Test
 		end
 	end
 
+	def delete_request(path)
+		Net::HTTP.start("127.0.0.1", @test_port.to_i) { |h| h.delete(path) }
+	end
+
 	# Regression: the doubled path must now return 404, not 202.
 	def test_doubled_report_status_path_returns_404
 		response = post_json("/report-status/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
@@ -95,5 +99,99 @@ class ServerRoutingTest < Minitest::Test
 	def test_info_returns_200
 		response = get_request("/_info")
 		assert_equal "200", response.code
+	end
+end
+
+class V2ServerRoutingTest < ServerRoutingTest
+	# ── v2 POST /v2/report-status ────────────────────────────────────────────
+
+	def test_v2_report_status_happy_path_returns_202
+		body = { "system" => "lucos_arachne", "job_name" => "ingestor_dbpedia", "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
+		assert_equal "202", response.code
+	end
+
+	def test_v2_report_status_omitted_job_name_returns_202
+		body = { "system" => "lucos_arachne", "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
+		assert_equal "202", response.code
+	end
+
+	def test_v2_report_status_missing_system_returns_400
+		response = post_json("/v2/report-status", { "frequency" => 60, "status" => "success" })
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_missing_frequency_returns_400
+		response = post_json("/v2/report-status", { "system" => "test", "status" => "success" })
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_missing_status_returns_400
+		response = post_json("/v2/report-status", { "system" => "test", "frequency" => 60 })
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_with_extra_path_segment_returns_404
+		response = post_json("/v2/report-status/extra", { "system" => "test", "frequency" => 60, "status" => "success" })
+		assert_equal "404", response.code
+	end
+
+	# ── v1 POST is an unchanged shim ─────────────────────────────────────────
+
+	def test_v1_report_status_still_works_after_v2_added
+		response = post_json("/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
+		assert_equal "202", response.code
+	end
+
+	# ── v2 DELETE /v2/schedule/{system}/{job_name} ────────────────────────────
+
+	def test_v2_delete_existing_row_returns_204
+		body = { "system" => "lucos_arachne", "job_name" => "my_job", "frequency" => 3_600, "status" => "success" }
+		post_json("/v2/report-status", body)
+		response = delete_request("/v2/schedule/lucos_arachne/my_job")
+		assert_equal "204", response.code
+	end
+
+	def test_v2_delete_nonexistent_row_returns_204
+		response = delete_request("/v2/schedule/nonexistent_system/nonexistent_job")
+		assert_equal "204", response.code
+	end
+
+	def test_v2_delete_missing_job_name_returns_404
+		response = delete_request("/v2/schedule/lucos_arachne")
+		assert_equal "404", response.code
+	end
+
+	def test_v2_delete_extra_path_segment_returns_404
+		response = delete_request("/v2/schedule/lucos_arachne/my_job/extra")
+		assert_equal "404", response.code
+	end
+
+	# ── v1 DELETE addresses (system, '') row ─────────────────────────────────
+
+	def test_v1_delete_addresses_empty_job_name_row
+		# Write via v1; confirm the row appears in /_info; delete via v1; confirm gone.
+		post_json("/report-status", { "system" => "cleanup_sys", "frequency" => 3_600, "status" => "success" })
+		info_before = JSON.parse(get_request("/_info").body)
+		assert info_before["checks"].key?("cleanup_sys"), "Row should appear in /_info before delete"
+
+		response = delete_request("/schedule/cleanup_sys")
+		assert_equal "204", response.code
+
+		info_after = JSON.parse(get_request("/_info").body)
+		refute info_after["checks"].key?("cleanup_sys"), "Row should be gone from /_info after v1 delete"
+	end
+
+	# ── Same row addressed by v1 and v2 with job_name='' ─────────────────────
+
+	def test_same_row_addressed_by_v1_and_v2_with_empty_job_name
+		# Both v1 POST and v2 POST (omitted job_name) should address the same row.
+		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
+		post_json("/v2/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
+
+		info = JSON.parse(get_request("/_info").body)
+		assert_equal 1, info["checks"].select { |k, _| k.start_with?("shared_sys") }.length,
+			"v1 and v2 with omitted job_name should produce exactly one check"
 	end
 end
