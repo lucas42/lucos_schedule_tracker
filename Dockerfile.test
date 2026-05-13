@@ -8,5 +8,4 @@ COPY src/Gemfile src/Gemfile.lock ./
 RUN bundle config set --local frozen true && bundle install
 
 COPY src/*.rb .
-
-CMD ["ruby", "server.rb"]
+COPY test/ ./test/

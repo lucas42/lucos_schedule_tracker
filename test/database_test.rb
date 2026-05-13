@@ -1,6 +1,6 @@
 require "minitest/autorun"
 require "sqlite3"
-require_relative "database"
+require_relative "../database"
 
 # Use an in-memory database so tests are fast and leave no state on disk.
 def make_db

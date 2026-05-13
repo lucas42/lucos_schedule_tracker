@@ -18,10 +18,11 @@ services:
       start_period: 15s
 
   test:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.test
     container_name: lucos_schedule_tracker_test
-    image: lucas42/lucos_schedule_tracker:${VERSION:-latest}
-    command: sh -c "ruby database_test.rb && ruby server_test.rb"
+    command: sh -c "ruby test/database_test.rb && ruby test/server_test.rb"
     profiles:
       - test
 
