@@ -13,17 +13,31 @@ jobs:
           name: Run tests
           command: docker compose --profile test up test --build --exit-code-from test
 
+  lint:
+    docker:
+      - image: cimg/ruby:3.3.6
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: cd src && bundle install
+      - run:
+          name: Run RuboCop
+          command: BUNDLE_GEMFILE=src/Gemfile bundle exec rubocop
+
 workflows:
   version: 2
   build-deploy:
     jobs:
       - test
+      - lint
       - lucos/build:
           serial-group: << pipeline.project.slug >>/build
       - lucos/deploy-avalon:
           serial-group: deploy-avalon
           requires:
             - test
+            - lint
             - lucos/build
           filters:
             branches:

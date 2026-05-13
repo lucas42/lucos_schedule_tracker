@@ -1,0 +1,70 @@
+AllCops:
+  NewCops: enable
+  SuggestExtensions: false
+  TargetRubyVersion: 3.3
+  # server.rb and database.rb are v1 implementation files due to be replaced
+  # by the v2 API rewrite.  Exclude them to keep CI noise-free until then.
+  Exclude:
+    - 'src/server.rb'
+    - 'src/database.rb'
+
+# ── Indentation: existing code uses tabs ────────────────────────────────────
+Layout/IndentationStyle:
+  EnforcedStyle: tabs
+
+Layout/IndentationWidth:
+  Width: 1
+
+# ── Don't enforce a single quote style — code mixes both ────────────────────
+Style/StringLiterals:
+  Enabled: false
+
+Style/StringLiteralsInInterpolation:
+  Enabled: false
+
+# ── No frozen_string_literal comment in existing files ──────────────────────
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+# ── Allow aligned spacing for constant blocks (e.g. ONE_DAY   = ...) ────────
+Layout/ExtraSpacing:
+  AllowForAlignment: true
+
+Layout/SpaceAroundOperators:
+  AllowForAlignment: true
+
+# ── Argument alignment — multi-line method calls may use simple indentation ──
+Layout/ArgumentAlignment:
+  Enabled: false
+
+# ── Minitest test names often include HTTP status codes (404, 202, etc.) ────
+Naming/VariableNumber:
+  Enabled: false
+
+# ── Dir.glob order is not guaranteed — keep the explicit .sort ───────────────
+Lint/RedundantDirGlobSort:
+  Enabled: false
+
+# ── Class/module documentation — not present in test classes ────────────────
+Style/Documentation:
+  Enabled: false
+
+# ── Metrics: setup/teardown methods and server.rb's request loop are long ────
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/BlockLength:
+  Enabled: false
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+# ── Inline rescue (e.g. cleanup.unlink rescue nil) ───────────────────────────
+Style/RescueModifier:
+  Enabled: false
