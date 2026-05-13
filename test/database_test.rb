@@ -274,3 +274,81 @@ class GetChecksTest < Minitest::Test
 		refute checks["weekly_job"][:ok], "Expected 2 consecutive errors to be not OK for a 7-day job (threshold is 2)"
 	end
 end
+
+class GetJobsTest < Minitest::Test
+	ONE_DAY    = 24 * 60 * 60
+	ONE_MINUTE = 60
+
+	def setup
+		@db = make_db
+	end
+
+	def test_empty_db_returns_empty_array
+		assert_equal [], @db.getJobs
+	end
+
+	def test_single_v2_row_with_job_name
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "ingestor_dbpedia")
+		jobs = @db.getJobs
+		assert_equal 1, jobs.length
+		job = jobs.first
+		assert_equal "lucos_arachne", job[:system]
+		assert_equal "ingestor_dbpedia", job[:job_name]
+		assert job[:check][:ok]
+		assert job[:metrics][:age].is_a?(Hash)
+		assert job[:metrics][:errors].is_a?(Hash)
+	end
+
+	def test_single_v1_shaped_row_with_empty_job_name
+		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY)
+		jobs = @db.getJobs
+		assert_equal 1, jobs.length
+		job = jobs.first
+		assert_equal "lucos_arachne_ingestor_dbpedia", job[:system]
+		assert_equal "", job[:job_name]
+		assert job[:check][:ok]
+	end
+
+	def test_mixed_v1_and_v2_rows_are_all_returned
+		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "ingestor_dbpedia")
+		assert_equal 2, @db.getJobs.length
+	end
+
+	def test_failing_check_last_error_older_than_threshold
+		# Write an error so the job is tracked, then advance time by simulating
+		# an old timestamp via a direct DB update.
+		@db.updateScheduleError("old_job", ONE_MINUTE, "oops")
+		@db.instance_variable_get(:@db).execute(
+			"UPDATE schedule_v3 SET last_error = datetime('now', '-1 year') WHERE system = 'old_job'"
+		)
+		jobs = @db.getJobs
+		refute jobs.first[:check][:ok], "Job with error older than threshold should not be OK"
+	end
+
+	def test_error_count_threshold_tripped
+		# Daily job has error_threshold of 2; two consecutive errors should alert.
+		@db.updateScheduleError("daily_job", ONE_DAY, "something broke")
+		@db.updateScheduleError("daily_job", ONE_DAY, "still broken")
+		job = @db.getJobs.first
+		refute job[:check][:ok], "Two consecutive errors on a daily job should not be OK"
+		assert_includes job[:check][:debug], "2 runs"
+	end
+
+	def test_metrics_shape_is_correct
+		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		job = @db.getJobs.first
+		assert job[:metrics][:age].key?(:value)
+		assert job[:metrics][:age].key?(:techDetail)
+		assert job[:metrics][:errors].key?(:value)
+		assert job[:metrics][:errors].key?(:techDetail)
+		assert_equal 0, job[:metrics][:errors][:value]
+	end
+
+	def test_tech_detail_contains_threshold
+		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		job = @db.getJobs.first
+		expected_threshold = @db.calculate_time_threshold(ONE_DAY)
+		assert_includes job[:check][:techDetail], expected_threshold.to_s
+	end
+end
