@@ -130,7 +130,10 @@ loop {
 							if frequency == 0
 								raise "Bad Request: `frequency` must be a positive integer"
 							end
-							job_name = body['job_name'] || ""
+							job_name = body['job_name']
+							unless job_name.is_a?(String) && !job_name.empty?
+								raise "Bad Request: `job_name` is required and must be a non-empty string"
+							end
 							case body['status']
 							when "success"
 								db.updateScheduleSuccess(body['system'], frequency, job_name)
