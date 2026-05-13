@@ -173,14 +173,29 @@ loop {
 					else
 						raise "File Not Found"
 					end
+				when 'jobs'
+					raise "File Not Found" if path.length > 2
+					if http_method == "GET"
+						status = 200
+						client.puts("HTTP/1.1 200 OK")
+						client.puts("Content-Type: application/json; Charset=UTF-8")
+						client.puts("")
+						client.puts(db.getJobs.to_json)
+					else
+						status = 405
+						client.puts("HTTP/1.1 405 Method Not Allowed")
+						client.puts("Allow: GET")
+						client.puts("Content-Type: text/plain")
+						client.puts("")
+						client.puts("Endpoint only accepts GET requests")
+					end
 				when "_info"
 					raise "File Not Found" if path.length > 2
 					status = 200
-					checks, metrics = db.getChecks
 					info = {
 						:system => "lucos_schedule_tracker",
-						:checks => checks,
-						:metrics => metrics,
+						:checks => {},
+						:metrics => {},
 						:ci => {
 							:circle => "gh/lucas42/lucos_schedule_tracker",
 						},

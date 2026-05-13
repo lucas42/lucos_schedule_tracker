@@ -171,16 +171,16 @@ class V2ServerRoutingTest < ServerRoutingTest
 	# ── v1 DELETE addresses (system, '') row ─────────────────────────────────
 
 	def test_v1_delete_addresses_empty_job_name_row
-		# Write via v1; confirm the row appears in /_info; delete via v1; confirm gone.
+		# Write via v1; confirm the row appears in /jobs; delete via v1; confirm gone.
 		post_json("/report-status", { "system" => "cleanup_sys", "frequency" => 3_600, "status" => "success" })
-		info_before = JSON.parse(get_request("/_info").body)
-		assert info_before["checks"].key?("cleanup_sys"), "Row should appear in /_info before delete"
+		jobs_before = JSON.parse(get_request("/jobs").body)
+		assert jobs_before.any? { |j| j["system"] == "cleanup_sys" }, "Row should appear in /jobs before delete"
 
 		response = delete_request("/schedule/cleanup_sys")
 		assert_equal "204", response.code
 
-		info_after = JSON.parse(get_request("/_info").body)
-		refute info_after["checks"].key?("cleanup_sys"), "Row should be gone from /_info after v1 delete"
+		jobs_after = JSON.parse(get_request("/jobs").body)
+		refute jobs_after.any? { |j| j["system"] == "cleanup_sys" }, "Row should be gone from /jobs after v1 delete"
 	end
 
 	# ── Same row addressed by v1 and v2 with job_name='' ─────────────────────
@@ -190,8 +190,34 @@ class V2ServerRoutingTest < ServerRoutingTest
 		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
 		post_json("/v2/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
 
-		info = JSON.parse(get_request("/_info").body)
-		assert_equal 1, info["checks"].select { |k, _| k.start_with?("shared_sys") }.length,
-			"v1 and v2 with omitted job_name should produce exactly one check"
+		jobs = JSON.parse(get_request("/jobs").body)
+		assert_equal 1, jobs.select { |j| j["system"] == "shared_sys" }.length,
+			"v1 and v2 with omitted job_name should produce exactly one row"
+	end
+
+	# ── GET /jobs ─────────────────────────────────────────────────────────────
+
+	def test_jobs_returns_empty_array_when_no_rows
+		response = get_request("/jobs")
+		assert_equal "200", response.code
+		assert_equal [], JSON.parse(response.body)
+	end
+
+	def test_jobs_returns_populated_entries
+		body = { "system" => "lucos_arachne", "job_name" => "my_job", "frequency" => 3_600, "status" => "success" }
+		post_json("/v2/report-status", body)
+		jobs = JSON.parse(get_request("/jobs").body)
+		assert_equal 1, jobs.length
+		job = jobs.first
+		assert_equal "lucos_arachne", job["system"]
+		assert_equal "my_job", job["job_name"]
+		assert job["check"]["ok"]
+		assert job["metrics"]["age"].key?("value")
+		assert job["metrics"]["errors"].key?("value")
+	end
+
+	def test_jobs_with_extra_path_segment_returns_404
+		response = get_request("/jobs/extra")
+		assert_equal "404", response.code
 	end
 end

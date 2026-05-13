@@ -106,43 +106,73 @@ class Database
 		end
 	end
 
+	# Returns an array of {system, job_name, check, metrics} hashes — one per
+	# row in schedule_v3.  All threshold derivation is performed server-side;
+	# consumers receive fully-derived check and metric values.
+	def getJobs
+		jobs = []
+		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
+			jobs << derive_job_entry(schedule)
+		end
+		jobs
+	end
+
+	# Returns (checks, metrics) hashes keyed by check_key, built from getJobs.
+	# Retained for /_info compatibility during the monitoring transition.
 	def getChecks
 		checks = {}
 		metrics = {}
-		@db.execute("SELECT * FROM #{SCHEDULE_TABLE}") do |schedule|
-			time_threshold = calculate_time_threshold(schedule["frequency"])
-			error_threshold = calculate_error_threshold(schedule["frequency"])
-			check_key = schedule["job_name"].empty? ? schedule["system"] : "#{schedule["system"]}/#{schedule["job_name"]}"
-			check = {
-				:techDetail => "Checks whether any of the #{error_threshold} most recently finished runs of scheduled job '#{check_key}' were successful, and that the most recent happened in the last #{time_threshold} seconds"
-			}
-			last_run = DateTime.parse(schedule["last_success"] || schedule["last_error"])
-			age = ((DateTime.now - last_run) * 24 * 60 * 60).to_i
-			if schedule["error_count"] >= error_threshold
-				check[:ok] = false
-				check[:debug] = "Last #{schedule["error_count"]} runs of scheduled job errored. Latest at #{schedule["last_error"]}"
-				unless schedule["message"].nil?
-					check[:debug] += " with message \"#{schedule["message"]}\""
-				end
-			else
-				if age < time_threshold
-					check[:ok] = true
-				else
-					check[:ok] = false
-					check[:debug] = "Job last ran at #{last_run}, which is #{age} seconds ago. (The threshold for erroring is an age of #{time_threshold}s)"
-				end
-			end
-
-			checks[check_key] = check
-			metrics["#{check_key}_age"] = {
-				:value => age,
-				:techDetail => "The number of seconds since the scheduled job last completed",
-			}
-			metrics["#{check_key}_errors"] = {
-				:value => schedule["error_count"],
-				:techDetail => "The number of consecutive errors this scheduled job has had since the last success",
-			}
+		getJobs.each do |job|
+			check_key = job[:job_name].empty? ? job[:system] : "#{job[:system]}/#{job[:job_name]}"
+			checks[check_key] = job[:check]
+			metrics["#{check_key}_age"]    = job[:metrics][:age]
+			metrics["#{check_key}_errors"] = job[:metrics][:errors]
 		end
-		return checks, metrics
+		[checks, metrics]
+	end
+
+	private
+
+	# Derives the full check + metrics entry for a single schedule_v3 row.
+	def derive_job_entry(schedule)
+		time_threshold  = calculate_time_threshold(schedule["frequency"])
+		error_threshold = calculate_error_threshold(schedule["frequency"])
+		check_key = schedule["job_name"].empty? ? schedule["system"] : "#{schedule["system"]}/#{schedule["job_name"]}"
+
+		check = {
+			techDetail: "Checks whether any of the #{error_threshold} most recently finished runs " \
+				"of scheduled job '#{check_key}' were successful, and that the most recent " \
+				"happened in the last #{time_threshold} seconds",
+		}
+		last_run = DateTime.parse(schedule["last_success"] || schedule["last_error"])
+		age = ((DateTime.now - last_run) * 24 * 60 * 60).to_i
+		if schedule["error_count"] >= error_threshold
+			check[:ok] = false
+			check[:debug] = "Last #{schedule["error_count"]} runs of scheduled job errored. Latest at #{schedule["last_error"]}"
+			unless schedule["message"].nil?
+				check[:debug] += " with message \"#{schedule["message"]}\""
+			end
+		elsif age < time_threshold
+			check[:ok] = true
+		else
+			check[:ok] = false
+			check[:debug] = "Job last ran at #{last_run}, which is #{age} seconds ago. (The threshold for erroring is an age of #{time_threshold}s)"
+		end
+
+		{
+			system: schedule["system"],
+			job_name: schedule["job_name"],
+			check: check,
+			metrics: {
+				age: {
+					value: age,
+					techDetail: "The number of seconds since the scheduled job last completed",
+				},
+				errors: {
+					value: schedule["error_count"],
+					techDetail: "The number of consecutive errors this scheduled job has had since the last success",
+				},
+			},
+		}
 	end
 end
