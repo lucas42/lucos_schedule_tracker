@@ -10,7 +10,8 @@ $stdout.sync = true
 $stderr.sync = true
 Thread.abort_on_exception = true
 
-db = Database.new("/var/lib/schedule_tracker/schedule.sqlite")
+db_path = ENV['DB_PATH'] || "/var/lib/schedule_tracker/schedule.sqlite"
+db = Database.new(db_path)
 
 port = ENV['PORT'] || raise("Enviornment Variable PORT not set")
 server = TCPServer.open(port)

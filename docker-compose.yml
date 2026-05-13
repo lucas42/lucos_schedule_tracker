@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
     container_name: lucos_schedule_tracker_test
-    command: sh -c "ruby test/database_test.rb && ruby test/server_test.rb"
+    command: ruby test/run_all.rb
     profiles:
       - test
 
