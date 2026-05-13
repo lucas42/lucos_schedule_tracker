@@ -1,3 +1,4 @@
+require_relative "test_helper"
 require "minitest/autorun"
 require "sqlite3"
 require_relative "../database"
@@ -96,7 +97,7 @@ class CalculateErrorThresholdTest < Minitest::Test
 end
 
 class GetChecksTest < Minitest::Test
-	ONE_DAY   = 24 * 60 * 60
+	ONE_DAY    = 24 * 60 * 60
 	SEVEN_DAYS = 7 * ONE_DAY
 
 	def setup
@@ -105,20 +106,20 @@ class GetChecksTest < Minitest::Test
 
 	def test_recent_success_is_ok
 		@db.updateScheduleSuccess("test_job", ONE_DAY)
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		assert checks["test_job"][:ok], "Expected recent success to be OK"
 	end
 
 	def test_tech_detail_reflects_threshold
 		@db.updateScheduleSuccess("test_job", ONE_DAY)
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		expected_threshold = @db.calculate_time_threshold(ONE_DAY)
 		assert_includes checks["test_job"][:techDetail], expected_threshold.to_s
 	end
 
 	def test_seven_day_job_tech_detail_reflects_tightened_threshold
 		@db.updateScheduleSuccess("weekly_job", SEVEN_DAYS)
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		expected_threshold = @db.calculate_time_threshold(SEVEN_DAYS)
 		# ~14 days + 30 min, not the old 21 days
 		assert_includes checks["weekly_job"][:techDetail], expected_threshold.to_s
@@ -138,7 +139,7 @@ class GetChecksTest < Minitest::Test
 		one_minute = 60
 		@db.updateScheduleError("test_job", one_minute, "something went wrong")
 		@db.updateScheduleError("test_job", one_minute, "something went wrong again")
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		assert checks["test_job"][:ok], "Expected 2 consecutive errors to still be OK for a 60s job (threshold is 5)"
 	end
 
@@ -146,7 +147,7 @@ class GetChecksTest < Minitest::Test
 	def test_consecutive_errors_alerts
 		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong")
 		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong again")
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		refute checks["test_job"][:ok], "Expected 2 consecutive errors to be not OK for a 1-day job (threshold is 2)"
 	end
 
@@ -154,7 +155,7 @@ class GetChecksTest < Minitest::Test
 	def test_two_consecutive_errors_alert_for_long_cadence_job
 		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong")
 		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong again")
-		checks, _ = @db.getChecks
+		checks, = @db.getChecks
 		refute checks["weekly_job"][:ok], "Expected 2 consecutive errors to be not OK for a 7-day job (threshold is 2)"
 	end
 end

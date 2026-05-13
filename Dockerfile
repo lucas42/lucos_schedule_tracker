@@ -5,7 +5,7 @@ ENV VERSION=$VERSION
 WORKDIR /usr/src/app
 
 COPY src/Gemfile src/Gemfile.lock ./
-RUN bundle config set --local frozen true && bundle install
+RUN bundle config set --local frozen true && bundle config set --local without "test lint" && bundle install
 
 COPY src/*.rb .
 

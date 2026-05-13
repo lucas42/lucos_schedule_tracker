@@ -1,3 +1,4 @@
+require_relative "test_helper"
 require "minitest/autorun"
 require "net/http"
 require "json"
@@ -5,7 +6,7 @@ require "socket"
 require "tempfile"
 
 class ServerRoutingTest < Minitest::Test
-	SERVER_RB = File.expand_path("../server.rb", __dir__)
+	SERVER_RB = File.expand_path("../server.rb", __dir__).freeze
 
 	def setup
 		# Unique SQLite file per test — no shared state between tests.
@@ -23,7 +24,7 @@ class ServerRoutingTest < Minitest::Test
 
 		# Spawn a fresh server for this test.
 		@server_pid = spawn(
-			{"PORT" => @test_port, "DB_PATH" => @db_file.path},
+			{ "PORT" => @test_port, "DB_PATH" => @db_file.path },
 			"ruby", SERVER_RB,
 			out: @server_log.path,
 			err: [@server_log.path, "a"]
@@ -31,12 +32,10 @@ class ServerRoutingTest < Minitest::Test
 
 		# Wait up to 2 s for the server to accept connections.
 		20.times do
-			begin
-				TCPSocket.new("127.0.0.1", @test_port.to_i).close
-				break
-			rescue Errno::ECONNREFUSED
-				sleep 0.1
-			end
+			TCPSocket.new("127.0.0.1", @test_port.to_i).close
+			break
+		rescue Errno::ECONNREFUSED
+			sleep 0.1
 		end
 	end
 
@@ -47,7 +46,7 @@ class ServerRoutingTest < Minitest::Test
 			puts "\n--- Server log for #{name} ---"
 			begin
 				puts File.read(@server_log.path)
-			rescue => e
+			rescue StandardError => e
 				puts "(log unavailable: #{e.message})"
 			end
 			puts "--- End server log ---"
@@ -70,13 +69,13 @@ class ServerRoutingTest < Minitest::Test
 
 	# Regression: the doubled path must now return 404, not 202.
 	def test_doubled_report_status_path_returns_404
-		response = post_json("/report-status/report-status", {"system" => "test", "frequency" => 60, "status" => "success"})
+		response = post_json("/report-status/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
 		assert_equal "404", response.code
 	end
 
 	# Happy path: a correctly-formed POST to /report-status still returns 202.
 	def test_valid_report_status_returns_202
-		response = post_json("/report-status", {"system" => "test", "frequency" => 60, "status" => "success"})
+		response = post_json("/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
 		assert_equal "202", response.code
 	end
 
