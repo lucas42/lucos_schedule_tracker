@@ -111,10 +111,28 @@ class V2ServerRoutingTest < ServerRoutingTest
 		assert_equal "202", response.code
 	end
 
-	def test_v2_report_status_omitted_job_name_returns_202
+	def test_v2_report_status_omitted_job_name_returns_400
 		body = { "system" => "lucos_arachne", "frequency" => 86_400, "status" => "success" }
 		response = post_json("/v2/report-status", body)
-		assert_equal "202", response.code
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_empty_job_name_returns_400
+		body = { "system" => "lucos_arachne", "job_name" => "", "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_null_job_name_returns_400
+		body = { "system" => "lucos_arachne", "job_name" => nil, "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
+		assert_equal "400", response.code
+	end
+
+	def test_v2_report_status_non_string_job_name_returns_400
+		body = { "system" => "lucos_arachne", "job_name" => 42, "frequency" => 86_400, "status" => "success" }
+		response = post_json("/v2/report-status", body)
+		assert_equal "400", response.code
 	end
 
 	def test_v2_report_status_missing_system_returns_400
@@ -183,16 +201,15 @@ class V2ServerRoutingTest < ServerRoutingTest
 		refute jobs_after.any? { |j| j["system"] == "cleanup_sys" }, "Row should be gone from /jobs after v1 delete"
 	end
 
-	# ── Same row addressed by v1 and v2 with job_name='' ─────────────────────
+	# ── v1 writes a (system, '') row; v2 no longer allows empty job_name ─────
 
-	def test_same_row_addressed_by_v1_and_v2_with_empty_job_name
-		# Both v1 POST and v2 POST (omitted job_name) should address the same row.
+	def test_v1_writes_empty_job_name_row
+		# v1 POST produces a row with an empty job_name (system-level row).
 		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
-		post_json("/v2/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
 
 		jobs = JSON.parse(get_request("/jobs").body)
 		assert_equal 1, jobs.select { |j| j["system"] == "shared_sys" }.length,
-			"v1 and v2 with omitted job_name should produce exactly one row"
+			"v1 should produce exactly one row"
 	end
 
 	# ── GET /jobs ─────────────────────────────────────────────────────────────
