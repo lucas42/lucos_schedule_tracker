@@ -56,6 +56,9 @@ Metrics/MethodLength:
 Metrics/BlockLength:
   Enabled: false
 
+Metrics/ClassLength:
+  Enabled: false
+
 Metrics/AbcSize:
   Enabled: false
 
@@ -63,6 +66,10 @@ Metrics/CyclomaticComplexity:
   Enabled: false
 
 Metrics/PerceivedComplexity:
+  Enabled: false
+
+# ── Test files naturally contain multiple test classes per file ───────────────
+Style/OneClassPerFile:
   Enabled: false
 
 # ── Inline rescue (e.g. cleanup.unlink rescue nil) ───────────────────────────

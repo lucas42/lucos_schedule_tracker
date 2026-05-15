@@ -199,8 +199,9 @@ class V2ServerRoutingTest < ServerRoutingTest
 	def test_v1_delete_addresses_empty_job_name_row
 		# Seed a v1-shaped row directly in the database (v1 POST is now 410 Gone).
 		raw_db = SQLite3::Database.new(@db_file.path)
+		tbl = "schedule_v3"
 		raw_db.execute(
-			"INSERT INTO schedule_v3(system, job_name, frequency, last_success, error_count) VALUES(?, ?, ?, datetime('now'), 0)",
+			"INSERT INTO #{tbl}(system, job_name, frequency, last_success, error_count) VALUES(?, ?, ?, datetime('now'), 0)",
 			["cleanup_sys", "", 3_600]
 		)
 		raw_db.close
