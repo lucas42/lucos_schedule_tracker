@@ -156,16 +156,16 @@ class V2DatabaseTest < Minitest::Test
 	end
 
 	def test_success_without_job_name_keyed_by_system_only
-		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "")
 		checks, = @db.getChecks
 		assert checks.key?("lucos_arachne"), "Row with empty job_name should use system as key"
 	end
 
-	def test_v1_and_v2_empty_job_name_address_same_row
-		@db.updateScheduleSuccess("shared_sys", ONE_DAY)      # v1 call
-		@db.updateScheduleSuccess("shared_sys", ONE_DAY, "")  # v2 call, job_name=''
+	def test_two_empty_job_name_writes_address_same_row
+		@db.updateScheduleSuccess("shared_sys", ONE_DAY, "")  # first write, job_name=''
+		@db.updateScheduleSuccess("shared_sys", ONE_DAY, "")  # second write, job_name=''
 		checks, = @db.getChecks
-		assert_equal 1, checks.length, "v1 and v2 with job_name='' should address the same row"
+		assert_equal 1, checks.length, "Two writes with job_name='' should address the same row"
 	end
 
 	def test_age_metric_uses_composite_key_for_named_job
@@ -176,19 +176,19 @@ class V2DatabaseTest < Minitest::Test
 	end
 
 	def test_delete_schedule_removes_empty_job_name_row
-		@db.updateScheduleSuccess("test_system", ONE_DAY)
+		@db.updateScheduleSuccess("test_system", ONE_DAY, "")
 		@db.deleteSchedule("test_system")
 		checks, = @db.getChecks
-		refute checks.key?("test_system"), "v1 deleteSchedule should remove the (system, '') row"
+		refute checks.key?("test_system"), "deleteSchedule should remove the (system, '') row"
 	end
 
 	def test_delete_schedule_does_not_affect_named_jobs
-		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "")
 		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "my_job")
 		@db.deleteSchedule("lucos_arachne")
 		checks, = @db.getChecks
-		refute checks.key?("lucos_arachne"), "v1 delete should remove the empty-job_name row"
-		assert checks.key?("lucos_arachne/my_job"), "Named job should be unaffected by v1 delete"
+		refute checks.key?("lucos_arachne"), "deleteSchedule should remove the empty-job_name row"
+		assert checks.key?("lucos_arachne/my_job"), "Named job should be unaffected by deleteSchedule"
 	end
 
 	def test_delete_schedule_v2_removes_named_row
@@ -220,20 +220,20 @@ class GetChecksTest < Minitest::Test
 	end
 
 	def test_recent_success_is_ok
-		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		@db.updateScheduleSuccess("test_job", ONE_DAY, "")
 		checks, = @db.getChecks
 		assert checks["test_job"][:ok], "Expected recent success to be OK"
 	end
 
 	def test_tech_detail_reflects_threshold
-		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		@db.updateScheduleSuccess("test_job", ONE_DAY, "")
 		checks, = @db.getChecks
 		expected_threshold = @db.calculate_time_threshold(ONE_DAY)
 		assert_includes checks["test_job"][:techDetail], expected_threshold.to_s
 	end
 
 	def test_seven_day_job_tech_detail_reflects_tightened_threshold
-		@db.updateScheduleSuccess("weekly_job", SEVEN_DAYS)
+		@db.updateScheduleSuccess("weekly_job", SEVEN_DAYS, "")
 		checks, = @db.getChecks
 		expected_threshold = @db.calculate_time_threshold(SEVEN_DAYS)
 		# ~14 days + 30 min, not the old 21 days
@@ -243,7 +243,7 @@ class GetChecksTest < Minitest::Test
 	end
 
 	def test_age_metric_is_present
-		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		@db.updateScheduleSuccess("test_job", ONE_DAY, "")
 		_, metrics = @db.getChecks
 		assert metrics.key?("test_job_age")
 		assert metrics.key?("test_job_errors")
@@ -252,24 +252,24 @@ class GetChecksTest < Minitest::Test
 	# High-frequency jobs (< 10 min, threshold 5) tolerate 4 errors before alerting.
 	def test_two_consecutive_errors_not_enough_to_alert_for_high_frequency_job
 		one_minute = 60
-		@db.updateScheduleError("test_job", one_minute, "something went wrong")
-		@db.updateScheduleError("test_job", one_minute, "something went wrong again")
+		@db.updateScheduleError("test_job", one_minute, "something went wrong", "")
+		@db.updateScheduleError("test_job", one_minute, "something went wrong again", "")
 		checks, = @db.getChecks
 		assert checks["test_job"][:ok], "Expected 2 consecutive errors to still be OK for a 60s job (threshold is 5)"
 	end
 
 	# Two consecutive errors on a daily job (threshold 2) should alert.
 	def test_consecutive_errors_alerts
-		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong")
-		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong again")
+		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong", "")
+		@db.updateScheduleError("test_job", ONE_DAY, "something went wrong again", "")
 		checks, = @db.getChecks
 		refute checks["test_job"][:ok], "Expected 2 consecutive errors to be not OK for a 1-day job (threshold is 2)"
 	end
 
 	# Weekly jobs (threshold 2). Two errors should still alert.
 	def test_two_consecutive_errors_alert_for_long_cadence_job
-		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong")
-		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong again")
+		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong", "")
+		@db.updateScheduleError("weekly_job", SEVEN_DAYS, "something went wrong again", "")
 		checks, = @db.getChecks
 		refute checks["weekly_job"][:ok], "Expected 2 consecutive errors to be not OK for a 7-day job (threshold is 2)"
 	end
@@ -300,7 +300,7 @@ class GetJobsTest < Minitest::Test
 	end
 
 	def test_single_v1_shaped_row_with_empty_job_name
-		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY, "")
 		jobs = @db.getJobs
 		assert_equal 1, jobs.length
 		job = jobs.first
@@ -310,7 +310,7 @@ class GetJobsTest < Minitest::Test
 	end
 
 	def test_mixed_v1_and_v2_rows_are_all_returned
-		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY)
+		@db.updateScheduleSuccess("lucos_arachne_ingestor_dbpedia", ONE_DAY, "")
 		@db.updateScheduleSuccess("lucos_arachne", ONE_DAY, "ingestor_dbpedia")
 		assert_equal 2, @db.getJobs.length
 	end
@@ -318,7 +318,7 @@ class GetJobsTest < Minitest::Test
 	def test_failing_check_last_error_older_than_threshold
 		# Write an error so the job is tracked, then advance time by simulating
 		# an old timestamp via a direct DB update.
-		@db.updateScheduleError("old_job", ONE_MINUTE, "oops")
+		@db.updateScheduleError("old_job", ONE_MINUTE, "oops", "")
 		@db.instance_variable_get(:@db).execute(
 			"UPDATE schedule_v3 SET last_error = datetime('now', '-1 year') WHERE system = 'old_job'"
 		)
@@ -328,15 +328,15 @@ class GetJobsTest < Minitest::Test
 
 	def test_error_count_threshold_tripped
 		# Daily job has error_threshold of 2; two consecutive errors should alert.
-		@db.updateScheduleError("daily_job", ONE_DAY, "something broke")
-		@db.updateScheduleError("daily_job", ONE_DAY, "still broken")
+		@db.updateScheduleError("daily_job", ONE_DAY, "something broke", "")
+		@db.updateScheduleError("daily_job", ONE_DAY, "still broken", "")
 		job = @db.getJobs.first
 		refute job[:check][:ok], "Two consecutive errors on a daily job should not be OK"
 		assert_includes job[:check][:debug], "2 runs"
 	end
 
 	def test_metrics_shape_is_correct
-		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		@db.updateScheduleSuccess("test_job", ONE_DAY, "")
 		job = @db.getJobs.first
 		assert job[:metrics][:age].key?(:value)
 		assert job[:metrics][:age].key?(:techDetail)
@@ -346,7 +346,7 @@ class GetJobsTest < Minitest::Test
 	end
 
 	def test_tech_detail_contains_threshold
-		@db.updateScheduleSuccess("test_job", ONE_DAY)
+		@db.updateScheduleSuccess("test_job", ONE_DAY, "")
 		job = @db.getJobs.first
 		expected_threshold = @db.calculate_time_threshold(ONE_DAY)
 		assert_includes job[:check][:techDetail], expected_threshold.to_s
