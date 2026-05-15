@@ -3,6 +3,7 @@ require "minitest/autorun"
 require "net/http"
 require "json"
 require "socket"
+require "sqlite3"
 require "tempfile"
 
 class ServerRoutingTest < Minitest::Test
@@ -77,10 +78,17 @@ class ServerRoutingTest < Minitest::Test
 		assert_equal "404", response.code
 	end
 
-	# Happy path: a correctly-formed POST to /report-status still returns 202.
-	def test_valid_report_status_returns_202
+	# v1 /report-status is retired and must return 410 Gone.
+	def test_report_status_returns_410_gone
 		response = post_json("/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
-		assert_equal "202", response.code
+		assert_equal "410", response.code
+	end
+
+	# The 410 response body is JSON pointing callers at v2.
+	def test_report_status_410_body_points_to_v2
+		response = post_json("/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
+		body = JSON.parse(response.body)
+		assert_equal "/v2/report-status", body["see"]
 	end
 
 	# Any completely unknown path must return 404.
@@ -155,11 +163,11 @@ class V2ServerRoutingTest < ServerRoutingTest
 		assert_equal "404", response.code
 	end
 
-	# ── v1 POST is an unchanged shim ─────────────────────────────────────────
+	# ── v1 POST is retired — 410 must apply even after v2 is active ──────────
 
-	def test_v1_report_status_still_works_after_v2_added
+	def test_v1_report_status_returns_410_after_v2_added
 		response = post_json("/report-status", { "system" => "test", "frequency" => 60, "status" => "success" })
-		assert_equal "202", response.code
+		assert_equal "410", response.code
 	end
 
 	# ── v2 DELETE /v2/schedule/{system}/{job_name} ────────────────────────────
@@ -186,11 +194,18 @@ class V2ServerRoutingTest < ServerRoutingTest
 		assert_equal "404", response.code
 	end
 
-	# ── v1 DELETE addresses (system, '') row ─────────────────────────────────
+	# ── v1 DELETE removes (system, '') rows — needed for the post-migration cleanup pass ──
 
 	def test_v1_delete_addresses_empty_job_name_row
-		# Write via v1; confirm the row appears in /jobs; delete via v1; confirm gone.
-		post_json("/report-status", { "system" => "cleanup_sys", "frequency" => 3_600, "status" => "success" })
+		# Seed a v1-shaped row directly in the database (v1 POST is now 410 Gone).
+		raw_db = SQLite3::Database.new(@db_file.path)
+		tbl = "schedule_v3"
+		raw_db.execute(
+			"INSERT INTO #{tbl}(system, job_name, frequency, last_success, error_count) VALUES(?, ?, ?, datetime('now'), 0)",
+			["cleanup_sys", "", 3_600]
+		)
+		raw_db.close
+
 		jobs_before = JSON.parse(get_request("/jobs").body)
 		assert jobs_before.any? { |j| j["system"] == "cleanup_sys" }, "Row should appear in /jobs before delete"
 
@@ -201,15 +216,14 @@ class V2ServerRoutingTest < ServerRoutingTest
 		refute jobs_after.any? { |j| j["system"] == "cleanup_sys" }, "Row should be gone from /jobs after v1 delete"
 	end
 
-	# ── v1 writes a (system, '') row; v2 no longer allows empty job_name ─────
+	# ── v1 POST returns 410; no row is written ────────────────────────────────
 
-	def test_v1_writes_empty_job_name_row
-		# v1 POST produces a row with an empty job_name (system-level row).
+	def test_v1_post_does_not_write_any_row
 		post_json("/report-status", { "system" => "shared_sys", "frequency" => 3_600, "status" => "success" })
 
 		jobs = JSON.parse(get_request("/jobs").body)
-		assert_equal 1, jobs.select { |j| j["system"] == "shared_sys" }.length,
-			"v1 should produce exactly one row"
+		assert_equal 0, jobs.select { |j| j["system"] == "shared_sys" }.length,
+			"v1 POST (now 410 Gone) must not write any row"
 	end
 
 	# ── GET /jobs ─────────────────────────────────────────────────────────────

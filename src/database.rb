@@ -42,11 +42,11 @@ class Database
 		return false
 	end
 
-	def updateScheduleSuccess(system, frequency, job_name = "")
+	def updateScheduleSuccess(system, frequency, job_name)
 		@db.execute("INSERT OR REPLACE INTO #{SCHEDULE_TABLE}(system, job_name, frequency, last_success, error_count, message) VALUES(?, ?, ?, datetime('now'), 0, NULL)", [system, job_name, frequency])
 	end
 
-	def updateScheduleError(system, frequency, error_message, job_name = "")
+	def updateScheduleError(system, frequency, error_message, job_name)
 		error_count = @db.get_first_value("SELECT error_count FROM #{SCHEDULE_TABLE} WHERE system = ? AND job_name = ?", [system, job_name]) || 0
 		error_count += 1
 		@db.execute("INSERT OR REPLACE INTO #{SCHEDULE_TABLE}(system, job_name, frequency, last_error, error_count, message) VALUES(?, ?, ?, datetime('now'), ?, ?)", [system, job_name, frequency, error_count, error_message])

@@ -69,35 +69,18 @@ loop {
 			case path[1]
 				when 'report-status'
 					raise "File Not Found" if path.length > 2
-					if http_method == "POST"
-						['system', 'frequency', 'status'].each { |field|
-							if body[field].nil?
-								raise "Bad Request: Missing `#{field}` field"
-							end
-						}
-						frequency = body['frequency'].to_i
-						if frequency == 0
-							raise "Bad Request: `frequency` must be a positive integer"
-						end
-						case body['status']
-						when "success"
-							db.updateScheduleSuccess(body['system'], frequency)
-						when "error"
-							db.updateScheduleError(body['system'], frequency, body['message'])
-						else
-							raise "Bad Request: Unrecognised value for `status` '#{body['status']}'"
-						end
-						status = 202
-						client.puts("HTTP/1.1 202 Accepted")
-						client.puts("")
-					else
-						status = 405
-						client.puts("HTTP/1.1 405 Method Not Allowed")
-						client.puts("Allow: POST")
-						client.puts("Content-Type: text/plain")
-						client.puts("")
-						client.puts("Endpoint only accepts POST requests")
-					end
+					$stderr.puts "WARN: v1 /report-status called (User-Agent: #{user_agent}) — this endpoint has been retired"
+					status = 410
+					gone_body = {
+						error: "Gone",
+						message: "The v1 /report-status endpoint has been retired. Use /v2/report-status instead.",
+						see: "/v2/report-status",
+						adr: "https://github.com/lucas42/lucos/blob/main/docs/adr/0004-scheduled-jobs-monitoring-architecture.md",
+					}.to_json
+					client.puts("HTTP/1.1 410 Gone")
+					client.puts("Content-Type: application/json")
+					client.puts("")
+					client.puts(gone_body)
 				when 'schedule'
 					system_name = path[2] && URI.decode_www_form_component(path[2])
 					if system_name.nil? || system_name.empty?
