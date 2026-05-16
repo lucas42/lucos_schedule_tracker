@@ -6,6 +6,7 @@ services:
       - ${PORT:-8024}:${PORT:-8024}
     environment:
       - PORT
+      - DB_PATH
     image: lucas42/lucos_schedule_tracker:${VERSION:-latest}
     volumes:
       - "db:/var/lib/schedule_tracker/"
