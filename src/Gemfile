@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-gem 'sqlite3', '~> 2.0', '>= 2.0.0'
+gem 'sqlite3', '~> 2.9'
 
 group :test do
 	gem 'minitest', '~> 5.0'
