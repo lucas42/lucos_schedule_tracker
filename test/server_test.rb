@@ -5,6 +5,7 @@ require "json"
 require "socket"
 require "sqlite3"
 require "tempfile"
+require "timeout"
 
 class ServerRoutingTest < Minitest::Test
 	SERVER_RB = File.expand_path("../server.rb", __dir__).freeze
@@ -250,5 +251,62 @@ class V2ServerRoutingTest < ServerRoutingTest
 	def test_jobs_with_extra_path_segment_returns_404
 		response = get_request("/jobs/extra")
 		assert_equal "404", response.code
+	end
+
+	# Sends raw bytes, then returns the server's full response (or nil if the
+	# server closed the connection without replying).
+	def raw_request(payload, wait: 5)
+		sock = TCPSocket.new("127.0.0.1", @test_port.to_i)
+		sock.write(payload)
+		response = begin
+			Timeout.timeout(wait) { sock.read }
+		rescue Errno::ECONNRESET
+			# Server closed with unread request bytes still pending, so the OS reset the connection.
+			""
+		end
+		sock.close
+		response.empty? ? nil : response
+	end
+
+	def test_idle_connection_is_closed_with_408
+		started = Time.now
+		response = raw_request("", wait: 20)
+		assert_match(%r{\AHTTP/1\.1 408}, response)
+		assert_operator Time.now - started, :<, 15
+	end
+
+	def test_post_without_content_length_returns_411
+		response = raw_request("POST /v2/report-status HTTP/1.1\r\nContent-Type: application/json\r\n\r\n")
+		assert_match(%r{\AHTTP/1\.1 411}, response)
+	end
+
+	def test_post_with_oversized_content_length_returns_413_without_reading_body
+		head = "POST /v2/report-status HTTP/1.1\r\nContent-Type: application/json\r\n"
+		response = raw_request("#{head}Content-Length: 1000000\r\n\r\n")
+		assert_match(%r{\AHTTP/1\.1 413}, response)
+	end
+
+	def test_post_with_negative_content_length_returns_400
+		head = "POST /v2/report-status HTTP/1.1\r\nContent-Type: application/json\r\n"
+		response = raw_request("#{head}Content-Length: -5\r\n\r\n")
+		assert_match(%r{\AHTTP/1\.1 400}, response)
+	end
+
+	def test_overlong_header_line_is_rejected
+		response = raw_request("GET /_info HTTP/1.1\r\nX-Junk: #{"a" * 20_000}\r\n\r\n")
+		assert_nil(response) unless response&.start_with?("HTTP/1.1 431")
+		refute_match(/200 OK/, response.to_s)
+		50.times do
+			break if File.read(@server_log.path).include?(" 431 ")
+
+			sleep 0.1
+		end
+		assert_includes File.read(@server_log.path), " 431 "
+	end
+
+	def test_too_many_header_lines_returns_431
+		headers = (1..150).map { |n| "X-H#{n}: v\r\n" }.join
+		response = raw_request("GET /_info HTTP/1.1\r\n#{headers}\r\n")
+		assert_match(%r{\AHTTP/1\.1 431}, response)
 	end
 end

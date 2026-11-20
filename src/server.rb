@@ -4,7 +4,22 @@ require 'net/http'
 require 'uri'
 require 'json'
 require 'time'
+require 'timeout'
 require './database.rb'
+
+REQUEST_TIMEOUT_SECONDS = 10
+MAX_HEADER_LINE_BYTES = 8192
+MAX_HEADER_LINES = 100
+MAX_BODY_BYTES = 64 * 1024
+
+class RequestRejected < StandardError
+	attr_reader :status, :reason
+	def initialize(status, reason)
+		@status = status
+		@reason = reason
+		super(reason)
+	end
+end
 
 $stdout.sync = true
 $stderr.sync = true
@@ -26,21 +41,33 @@ loop {
 		user_agent = "-"
 		begin
 			_, _, _, remote_ip = client.peeraddr
-			while line = client.gets
-				if header.nil?
-					header = line.strip
-				end
-				if line.start_with?("Content-Length: ")
-					request_length = line.split(': ')[1].strip.to_i
-				end
-				if line.start_with?("Content-Type: ")
-					request_type = line.split(': ')[1].strip
-				end
-				if line.start_with?("User-Agent: ")
-					user_agent = line.split(': ', 2)[1].strip
-				end
-				if line == "\r\n"
-					break
+			deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REQUEST_TIMEOUT_SECONDS
+			remaining = -> { [deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC), 0.001].max }
+			header_line_count = 0
+			request_length = nil
+			request_type = nil
+			Timeout.timeout(remaining.call) do
+				while line = client.gets(MAX_HEADER_LINE_BYTES)
+					header_line_count += 1
+					if !line.end_with?("\n") || header_line_count > MAX_HEADER_LINES
+						header ||= "-"
+						raise RequestRejected.new(431, "Request Header Fields Too Large")
+					end
+					if header.nil?
+						header = line.strip
+					end
+					if line.start_with?("Content-Length: ")
+						request_length = line.split(': ')[1].strip.to_i
+					end
+					if line.start_with?("Content-Type: ")
+						request_type = line.split(': ')[1].strip
+					end
+					if line.start_with?("User-Agent: ")
+						user_agent = line.split(': ', 2)[1].strip
+					end
+					if line == "\r\n"
+						break
+					end
 				end
 			end
 			if header.nil?
@@ -55,7 +82,10 @@ loop {
 			path = uri.path.gsub('..','').split('/')
 			body = nil
 			if http_method == "POST"
-				raw_body = client.read(request_length)
+				raise RequestRejected.new(411, "Length Required") if request_length.nil?
+				raise RequestRejected.new(400, "Bad Request") if request_length < 0
+				raise RequestRejected.new(413, "Payload Too Large") if request_length > MAX_BODY_BYTES
+				raw_body = Timeout.timeout(remaining.call) { client.read(request_length) }
 				if request_type == "application/json"
 					begin
 						body = JSON.parse(raw_body)
@@ -195,6 +225,26 @@ loop {
 				else
 					raise "File Not Found"
 				end
+		rescue RequestRejected, Timeout::Error => e
+			if e.is_a?(Timeout::Error)
+				status = 408
+				reason = "Request Timeout"
+			else
+				status = e.status
+				reason = e.reason
+			end
+			begin
+				client.puts("HTTP/1.1 #{status} #{reason}")
+				client.puts("Content-Type: text/plain")
+				client.puts("Connection: close")
+				client.puts
+				client.puts(reason)
+			rescue Exception => rescueException
+				puts "Failed to send #{status} to client: "+rescueException.message
+			end
+			puts remote_ip+" - - \""+(header || "-")+"\" ["+request_time+"] "+status.to_s+" - \""+user_agent+"\""
+			client.close
+			next
 		rescue Exception => e
 			if header.nil?
 				puts "Exception occurred before HTTP request was completed "+remote_ip
